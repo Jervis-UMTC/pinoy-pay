@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { Save, CheckCircle } from 'lucide-react';
+import { Save, CheckCircle, Clock, CalendarDays } from 'lucide-react';
 import { WorkDay } from '@/utils/computePay';
 import { generateAutoFillEntries } from '@/utils/projections';
+import { PayScheduleConfig, DEFAULT_SCHEDULE } from '@/utils/payPeriod';
 import ConfirmationModal from '@/components/ConfirmationModal';
+import { useRouter } from 'next/navigation';
 
 const DAYS_OF_WEEK = [
   { id: 0, label: 'Sun' },
@@ -17,31 +19,53 @@ const DAYS_OF_WEEK = [
   { id: 6, label: 'Sat' },
 ];
 
-import { useRouter } from 'next/navigation';
-
 export default function SettingsPage() {
-  const router = useRouter(); // Add router
+  const router = useRouter();
   const [rate, setRate] = useLocalStorage<number>('pinoy_pay_default_rate', 610);
   const [history, setHistory] = useLocalStorage<WorkDay[]>('pinoy_pay_history', []);
   const [onboarded, setOnboarded] = useLocalStorage<boolean>('pinoy_pay_is_onboarded', false);
   const [persistedWorkDays, setPersistedWorkDays] = useLocalStorage<number[]>('pinoy_pay_work_days', [1, 2, 3, 4, 5]);
+  const [rateBasis, setRateBasis] = useLocalStorage<'daily' | 'hourly'>('pinoy_pay_rate_basis', 'daily'); // Fix missing default if any
+
+  // Pay Schedule
+  const [paySchedule, setPaySchedule] = useLocalStorage<PayScheduleConfig>('pinoy_pay_schedule', DEFAULT_SCHEDULE);
+
+  // Shift Defaults
+  const [defaultStartTime, setDefaultStartTime] = useLocalStorage<string>('pinoy_pay_default_start_time', '08:00');
+  const [defaultEndTime, setDefaultEndTime] = useLocalStorage<string>('pinoy_pay_default_end_time', '17:00');
+  const [defaultBreakHours, setDefaultBreakHours] = useLocalStorage<number>('pinoy_pay_default_break_hours', 1);
 
   // Temp state for batch editing
   const [tempWorkDays, setTempWorkDays] = useState<number[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [tempRateBasis, setTempRateBasis] = useState<'daily' | 'hourly'>('daily');
+  const [tempPaySchedule, setTempPaySchedule] = useState<PayScheduleConfig>(DEFAULT_SCHEDULE);
 
-  // Input State: Use string to allow empty input
+  // Input State
   const [rateInput, setRateInput] = useState(rate.toString());
+  const [startTimeInput, setStartTimeInput] = useState('');
+  const [endTimeInput, setEndTimeInput] = useState('');
+  const [breakInput, setBreakInput] = useState('');
+
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // Sync temp state with persisted state on load
+  // Sync temp state
   useEffect(() => {
     setTempWorkDays(persistedWorkDays);
+    setTempRateBasis(rateBasis);
+    setTempPaySchedule(paySchedule);
     setHasChanges(false);
-  }, [persistedWorkDays]);
+  }, [persistedWorkDays, rateBasis, paySchedule]);
 
-  // Keep rateInput synced if rate changes externally
+  // Sync inputs with defaults
+  useEffect(() => {
+    setStartTimeInput(defaultStartTime);
+    setEndTimeInput(defaultEndTime);
+    setBreakInput(defaultBreakHours.toString());
+  }, [defaultStartTime, defaultEndTime, defaultBreakHours]);
+
+  // Keep rateInput synced
   useEffect(() => {
     if (rate && Number(rateInput) !== rate) {
       setRateInput(rate.toString());
@@ -67,7 +91,6 @@ export default function SettingsPage() {
     }
   };
 
-  // On blur, if empty, reset to current rate or 0
   const handleRateBlur = () => {
     if (rateInput === '') {
       setRateInput(rate.toString());
@@ -79,25 +102,52 @@ export default function SettingsPage() {
   };
 
   const performSave = () => {
-    // 1. Save Schedule
+    // 1. Save Settings
     setPersistedWorkDays(tempWorkDays);
+    setRateBasis(tempRateBasis);
+    setPaySchedule(tempPaySchedule);
+    if (startTimeInput) setDefaultStartTime(startTimeInput);
+    if (endTimeInput) setDefaultEndTime(endTimeInput);
+    if (breakInput) setDefaultBreakHours(Number(breakInput));
+
     setHasChanges(false);
 
-    // 2. Auto-Fill for Current Month using the NEW schedule (tempWorkDays)
-    const newEntries = generateAutoFillEntries(new Date(), history, rate, tempWorkDays);
+    // 2. Clean Up: Remove days that are no longer in the schedule for the current month
+    const currentMonthPrefix = new Date().toISOString().slice(0, 7); // yyyy-MM
+    const cleanHistory = history.filter(entry => {
+      // Keep entries from other months
+      if (!entry.date.startsWith(currentMonthPrefix)) return true;
 
-    if (newEntries.length > 0) {
-      // Merge and Save History
-      const updatedHistory = [...history, ...newEntries].sort((a, b) =>
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-      setHistory(updatedHistory);
-    }
+      // For current month, verify the day matches the new schedule
+      const entryDate = new Date(entry.date);
+      const dayOfWeek = entryDate.getDay();
+      return tempWorkDays.includes(dayOfWeek);
+    });
 
-    // 3. Complete Onboarding
+    // 3. Auto-Fill for Current Month using the NEW settings
+    const newEntries = generateAutoFillEntries(
+      new Date(),
+      cleanHistory, // Use cleaned history
+      rate,
+      tempWorkDays,
+      {
+        startTime: startTimeInput || '08:00',
+        endTime: endTimeInput || '17:00',
+        breakHours: Number(breakInput || 1)
+      },
+      tempRateBasis
+    );
+
+    // Merge and Save History
+    const updatedHistory = [...cleanHistory, ...newEntries].sort((a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    setHistory(updatedHistory);
+
+    // 4. Complete Onboarding
     setOnboarded(true);
     setShowConfirm(false);
-    setTimeout(() => setShowSuccess(true), 300); // Slight delay for animation smoothness
+    setTimeout(() => setShowSuccess(true), 300);
   };
 
   // Generate Summary for Modal
@@ -152,10 +202,31 @@ export default function SettingsPage() {
           {onboarded && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold flex items-center gap-1"><CheckCircle size={10} /> Active</span>}
         </div>
 
-        {/* Daily Rate */}
+        {/* Rate Basis Toggle & Input */}
         <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-100">
-          <label className="block text-sm font-bold text-slate-700 mb-2">Daily Rate (₱)</label>
-          <p className="text-xs text-slate-400 mb-3">Your base pay for a normal shift.</p>
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <label className="block text-base font-bold text-slate-700">{tempRateBasis === 'daily' ? 'Daily Rate (₱)' : 'Hourly Rate (₱)'}</label>
+              <p className="text-sm text-slate-500 mt-1">
+                {tempRateBasis === 'daily' ? 'Base pay per day.' : 'Base pay per hour.'}
+              </p>
+            </div>
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button
+                onClick={() => { setTempRateBasis('daily'); setHasChanges(true); }}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${tempRateBasis === 'daily' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-500'}`}
+              >
+                Daily
+              </button>
+              <button
+                onClick={() => { setTempRateBasis('hourly'); setHasChanges(true); }}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${tempRateBasis === 'hourly' ? 'bg-white text-blue-900 shadow' : 'text-slate-500'}`}
+              >
+                Hourly
+              </button>
+            </div>
+          </div>
+
           <div className="relative">
             <input
               type="number"
@@ -166,56 +237,158 @@ export default function SettingsPage() {
               className="w-full p-4 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-900 outline-none font-mono text-xl bg-white"
             />
           </div>
+        </div>
 
-          {/* Work Schedule */}
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-bold text-gray-700">My Work Schedule</label>
-              {hasChanges && (
-                <span className="text-xs font-bold text-amber-600 animate-pulse">Unsaved Changes</span>
-              )}
+        {/* Shift Details (Only for Hourly) */}
+        {tempRateBasis === 'hourly' && (
+          <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-100 animate-in fade-in slide-in-from-top-4 duration-300">
+            <label className="block text-base font-bold text-slate-700 mb-2 flex items-center gap-2">
+              <Clock size={18} />
+              Shift Details
+            </label>
+            <p className="text-sm text-slate-500 mb-4">Default hours for auto-calculation.</p>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Start</label>
+                <input
+                  type="time"
+                  value={startTimeInput}
+                  onChange={(e) => { setStartTimeInput(e.target.value); setHasChanges(true); }}
+                  className="w-full p-4 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-900 outline-none bg-white font-medium text-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">End</label>
+                <input
+                  type="time"
+                  value={endTimeInput}
+                  onChange={(e) => { setEndTimeInput(e.target.value); setHasChanges(true); }}
+                  className="w-full p-4 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-900 outline-none bg-white font-medium text-lg"
+                />
+              </div>
             </div>
-            <p className="text-xs text-gray-500 mb-4">
-              Select days you normally work.
-              <span className="block mt-1 text-[#1e3a8a] font-medium">Saving will auto-fill your calendar for this month.</span>
-            </p>
 
-            <div className="flex justify-between gap-2 mb-4">
-              {DAYS_OF_WEEK.map((day) => {
-                const isSelected = tempWorkDays.includes(day.id);
-                return (
-                  <button
-                    key={day.id}
-                    onClick={() => toggleDay(day.id)}
-                    className={`flex-1 aspect-square rounded-xl flex items-center justify-center text-sm font-bold transition-all duration-200 border-2 select-none ${isSelected
-                      ? 'bg-[#1e3a8a] border-[#1e3a8a] text-white shadow-lg shadow-blue-900/20 transform scale-105'
-                      : 'bg-white border-slate-200 text-slate-500 hover:border-[#1e3a8a] hover:text-[#1e3a8a] hover:bg-blue-50'
-                      } active:scale-95`}
-                  >
-                    {day.label.slice(0, 3)}
-                  </button>
-                );
-              })}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Break Deduction (Hours)</label>
+              <input
+                type="number"
+                step="0.5"
+                value={breakInput}
+                onChange={(e) => { setBreakInput(e.target.value); setHasChanges(true); }}
+                className="w-full p-4 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-900 outline-none bg-white font-medium text-lg"
+              />
             </div>
+          </div>
+        )}
 
-            {/* Save Button for Schedule */}
+        {/* Pay Schedule */}
+        <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+            <CalendarDays size={16} />
+            Pay Schedule
+          </label>
+          <p className="text-xs text-slate-400 mb-4">When do you receive your salary?</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Type A: Corporate */}
             <button
-              onClick={handleSaveClick}
-              className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all bg-[#1e3a8a] text-white shadow-lg shadow-blue-200 hover:bg-blue-900 active:scale-95"
+              onClick={() => { setTempPaySchedule({ ...tempPaySchedule, frequency: 'semi-monthly' }); setHasChanges(true); }}
+              className={`p-3 rounded-xl border-2 text-left transition-all relative overflow-hidden ${tempPaySchedule.frequency === 'semi-monthly'
+                ? 'border-blue-900 bg-blue-50'
+                : 'border-white bg-white hover:border-blue-200'
+                }`}
             >
-              <Save size={18} />
-              Save & Auto-Fill Month
+              <div className="text-xs font-bold text-slate-700 mb-1">Corporate</div>
+              <div className="text-[10px] text-slate-500">15th & 30th</div>
+              <div className="text-[8px] text-slate-400 mt-1">
+                Cutoff: 1-15 / 16-End
+              </div>
+              {tempPaySchedule.frequency === 'semi-monthly' && <CheckCircle size={14} className="text-blue-900 absolute top-2 right-2" />}
+            </button>
+
+            {/* Type B: Weekly */}
+            <button
+              onClick={() => { setTempPaySchedule({ ...tempPaySchedule, frequency: 'weekly', payDayOfWeek: 6 }); setHasChanges(true); }}
+              className={`p-3 rounded-xl border-2 text-left transition-all relative overflow-hidden ${tempPaySchedule.frequency === 'weekly'
+                ? 'border-blue-900 bg-blue-50'
+                : 'border-white bg-white hover:border-blue-200'
+                }`}
+            >
+              <div className="text-xs font-bold text-slate-700 mb-1">Weekly</div>
+              <div className="text-[10px] text-slate-500">Every Saturday</div>
+              <div className="text-[8px] text-slate-400 mt-1">
+                Lag: 1 Week (Mon-Sun)
+              </div>
+              {tempPaySchedule.frequency === 'weekly' && <CheckCircle size={14} className="text-blue-900 absolute top-2 right-2" />}
+            </button>
+
+            {/* Type C: Monthly */}
+            <button
+              onClick={() => { setTempPaySchedule({ ...tempPaySchedule, frequency: 'monthly', monthlyPayDay: 15 }); setHasChanges(true); }}
+              className={`p-3 rounded-xl border-2 text-left transition-all relative overflow-hidden ${tempPaySchedule.frequency === 'monthly'
+                ? 'border-blue-900 bg-blue-50'
+                : 'border-white bg-white hover:border-blue-200'
+                }`}
+            >
+              <div className="text-xs font-bold text-slate-700 mb-1">Monthly</div>
+              <div className="text-[10px] text-slate-500">Every 15th</div>
+              <div className="text-[8px] text-slate-400 mt-1">
+                Cutoff: Entire Prev Month
+              </div>
+              {tempPaySchedule.frequency === 'monthly' && <CheckCircle size={14} className="text-blue-900 absolute top-2 right-2" />}
             </button>
           </div>
+        </div>
 
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-700 mb-2">About PinoyPay</h3>
-            <p className="text-xs text-gray-500">
-              A privacy-focused, offline-first salary calculator.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <span className="px-2 py-1 bg-blue-100 text-[#1e3a8a] text-[10px] rounded font-mono">v1.2.1</span>
-            </div>
+        {/* Work Schedule */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <label className="block text-base font-bold text-gray-700">My Work Schedule</label>
+            {hasChanges && (
+              <span className="text-xs font-bold text-amber-600 animate-pulse">Unsaved Changes</span>
+            )}
+          </div>
+          <p className="text-sm text-gray-500 mb-6">
+            Select days you normally work.
+            <span className="block mt-1 text-[#1e3a8a] font-medium">Saving will auto-fill your calendar for this month.</span>
+          </p>
+
+          <div className="grid grid-cols-4 md:grid-cols-7 gap-3 mb-6">
+            {DAYS_OF_WEEK.map((day) => {
+              const isSelected = tempWorkDays.includes(day.id);
+              return (
+                <button
+                  key={day.id}
+                  onClick={() => toggleDay(day.id)}
+                  className={`rounded-2xl flex flex-col items-center justify-center text-sm font-bold transition-all duration-200 border-2 select-none h-20 md:h-14 ${isSelected
+                    ? 'bg-[#1e3a8a] border-[#1e3a8a] text-white shadow-lg shadow-blue-900/20 transform scale-105'
+                    : 'bg-white border-slate-200 text-slate-500 hover:border-[#1e3a8a] hover:text-[#1e3a8a] hover:bg-blue-50'
+                    } active:scale-95`}
+                >
+                  <span className="text-base md:text-sm">{day.label.slice(0, 3)}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Save Button for Schedule */}
+          <button
+            onClick={handleSaveClick}
+            className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all bg-[#1e3a8a] text-white shadow-lg shadow-blue-200 hover:bg-blue-900 active:scale-95"
+          >
+            <Save size={18} />
+            Save & Auto-Fill Month
+          </button>
+        </div>
+
+        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <h3 className="text-sm font-bold text-gray-700 mb-2">About PinoyPay</h3>
+          <p className="text-xs text-gray-500">
+            A privacy-focused, offline-first salary calculator.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <span className="px-2 py-1 bg-blue-100 text-[#1e3a8a] text-[10px] rounded font-mono">v1.2.1</span>
           </div>
         </div>
       </div>

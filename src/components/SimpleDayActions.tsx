@@ -19,6 +19,7 @@ interface Props {
 export default function SimpleDayActions({ date, existingEntry, onSave, onDelete, onClose, onMoreOptions }: Props) {
   const [rate] = useLocalStorage<number>('pinoy_pay_default_rate', 610);
   const [workDays] = useLocalStorage<number[]>('pinoy_pay_work_days', [1, 2, 3, 4, 5]);
+  const [rateBasis] = useLocalStorage<'daily' | 'hourly'>('pinoy_pay_rate_basis', 'daily');
 
   // Calculate default values
   const defaultWorkEntry = useMemo(() => {
@@ -30,7 +31,7 @@ export default function SimpleDayActions({ date, existingEntry, onSave, onDelete
     const dayType: 'normal' | 'special' | 'regular' = holiday ? holiday.type : 'normal';
 
     // Compute default pay
-    const computedPay = computePay(8, rate, dayType, isRestDay, false); // 8 hours, no night shift
+    const computedPay = computePay(8, rate, rateBasis, dayType, isRestDay, false); // 8 hours, no night shift
 
     // Use date-fns format to match local date keys
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -45,7 +46,7 @@ export default function SimpleDayActions({ date, existingEntry, onSave, onDelete
       totalPay: computedPay,
       notes: holiday ? holiday.name : '',
     };
-  }, [date, rate, workDays]);
+  }, [date, rate, workDays, rateBasis]);
 
   const handleWorkDayStart = () => {
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -129,7 +130,13 @@ export default function SimpleDayActions({ date, existingEntry, onSave, onDelete
 
         {/* Footer Actions */}
         <div className="flex flex-col gap-3">
-          {/* Removed More Options as requested */}
+          <button
+            onClick={onMoreOptions}
+            className="w-full py-3 px-4 rounded-xl text-slate-500 font-bold text-sm hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <MoreHorizontal size={16} />
+            More Details
+          </button>
 
           <button
             onClick={onClose}

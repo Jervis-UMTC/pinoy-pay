@@ -16,6 +16,7 @@ import {
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { WorkDay } from '@/utils/computePay';
 import { getHoliday } from '@/utils/holidays';
+import { PayScheduleConfig, DEFAULT_SCHEDULE, isPayDay, getNextPayPeriod, getPayPeriodForPayDate } from '@/utils/payPeriod';
 import DayLogModal from './DayLogModal';
 import SimpleDayActions from './SimpleDayActions';
 
@@ -27,11 +28,14 @@ interface Props {
   onDelete: (id: string) => void;
   rate: number;
   workDays: number[];
+  rateBasis?: 'daily' | 'hourly';
+  hoursPerDay?: number;
+  paySchedule?: PayScheduleConfig;
 }
 
 type ModalMode = 'none' | 'simple' | 'detailed';
 
-export default function CalendarGrid({ history, onSave, onDelete, rate, workDays = [1, 2, 3, 4, 5] }: Props) {
+export default function CalendarGrid({ history, onSave, onDelete, rate, workDays = [1, 2, 3, 4, 5], rateBasis = 'daily', hoursPerDay = 8, paySchedule = DEFAULT_SCHEDULE }: Props) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Modal State
@@ -55,7 +59,7 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
   };
 
   // Projection Calculation
-  const { totalProjected, earnedSoFar } = getMonthProjection(currentDate, history, rate || 610, workDays);
+  const { totalProjected, earnedSoFar } = getMonthProjection(currentDate, history, rate || 610, workDays, rateBasis, hoursPerDay);
   const progressPercentage = totalProjected > 0 ? Math.min((earnedSoFar / totalProjected) * 100, 100) : 0;
 
   const handleDayClick = (day: Date) => {
@@ -141,6 +145,25 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
             textClass = 'text-slate-800 font-bold';
           }
 
+          const isActualPayDay = isPayDay(day, paySchedule);
+          const dayPayPeriod = getNextPayPeriod(day, paySchedule);
+          // Check if today is strictly after the pay date (Paid status)
+          const isPaidStatus = entry && now > dayPayPeriod.payDate;
+
+          // Calculate Payout Total if this is a Pay Day
+          let payoutTotal = 0;
+          if (isActualPayDay) {
+            const period = getPayPeriodForPayDate(day, paySchedule);
+            if (period) {
+              const startStr = format(period.start, 'yyyy-MM-dd');
+              const endStr = format(period.end, 'yyyy-MM-dd');
+              // Sum of all work days in the Covered Period
+              payoutTotal = history
+                .filter(h => h.date >= startStr && h.date <= endStr)
+                .reduce((sum, h) => sum + h.totalPay, 0);
+            }
+          }
+
           return (
             <div
               key={day.toString()}
@@ -164,6 +187,20 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
                 {isPast && isCurrentMonth && !entry && (
                   <div className="w-1.5 h-1.5 rounded-full bg-slate-200 mr-1 mt-1"></div>
                 )}
+
+                {/* Pay Day Indicator or Total Payout */}
+                {isActualPayDay && (
+                  payoutTotal > 0 ? (
+                    <div className="absolute top-1 right-1 bg-gradient-to-br from-yellow-300 to-amber-400 text-blue-900 border border-amber-100 px-1.5 py-0.5 rounded-lg shadow-sm z-30 flex flex-col items-end">
+                      <span className="text-[7px] uppercase font-bold text-amber-900/60 leading-none mb-0.5">Payout</span>
+                      <span className="text-[10px] md:text-xs font-black leading-none">₱{Math.round(payoutTotal).toLocaleString()}</span>
+                    </div>
+                  ) : (
+                    <div className="absolute top-1 right-1 bg-[#FDD723] text-blue-900 w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center text-[10px] md:text-xs font-black shadow-md ring-1 ring-white z-20" title="Pay Day">
+                      ₱
+                    </div>
+                  )
+                )}
               </div>
 
               {/* Status Indicators */}
@@ -177,7 +214,10 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
 
                 {/* Entry Badge */}
                 {entry ? (
-                  <div className="bg-green-100 text-green-700 text-[9px] md:text-xs font-bold px-1 rounded py-0.5 mt-auto">
+                  <div className={`text-[9px] md:text-xs font-bold px-1 rounded py-0.5 mt-auto transition-colors ${isPaidStatus
+                    ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300'
+                    : 'bg-green-100 text-green-700'
+                    }`}>
                     ₱{Math.round(entry.totalPay).toLocaleString()}
                   </div>
                 ) : (

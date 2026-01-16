@@ -19,6 +19,12 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
   const [rate] = useLocalStorage<number>('pinoy_pay_default_rate', 610);
   const [workDays] = useLocalStorage<number[]>('pinoy_pay_work_days', [1, 2, 3, 4, 5]);
 
+  // Global Defaults
+  const [defaultStartTime] = useLocalStorage<string>('pinoy_pay_default_start_time', '08:00');
+  const [defaultEndTime] = useLocalStorage<string>('pinoy_pay_default_end_time', '17:00');
+  const [defaultBreakHours] = useLocalStorage<number>('pinoy_pay_default_break_hours', 1);
+  const [rateBasis] = useLocalStorage<'daily' | 'hourly'>('pinoy_pay_rate_basis', 'daily');
+
   // Form State
   const [hours, setHours] = useState<number | ''>('');
   const [dayType, setDayType] = useState<'normal' | 'special' | 'regular'>('normal');
@@ -26,6 +32,12 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
   const [isNightShift, setIsNightShift] = useState(false);
   const [notes, setNotes] = useState('');
   const [computedPay, setComputedPay] = useState<number>(0);
+
+  // Shift Logic State
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [breakHours, setBreakHours] = useState<number>(0);
+  const [isBreakManuallySet, setIsBreakManuallySet] = useState(false);
 
   // Initialize Data on Load
   useEffect(() => {
@@ -35,6 +47,8 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
       setIsRestDay(existingEntry.isRestDay);
       setIsNightShift(existingEntry.isNightShift);
       setNotes(existingEntry.notes || '');
+      // Default to standard hours if not strictly defined.
+      // For now, leave blank if editing, unless we change the interface to store them.
     } else {
       // SMART DEFAULTS
       const holiday = getHoliday(date);
@@ -55,18 +69,71 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
 
       setHours('');
       setIsNightShift(false);
+
+      // Use Global Defaults
+      setStartTime(defaultStartTime);
+      setEndTime(defaultEndTime);
+      setBreakHours(defaultBreakHours);
+      setIsBreakManuallySet(true); // Treat defaults as "set" to avoid auto-override by smart logic initially
     }
-  }, [existingEntry, date, workDays]);
+  }, [existingEntry, date, workDays, defaultStartTime, defaultEndTime, defaultBreakHours]);
+
+  // Handle Break Manual Override
+  const handleBreakChange = (val: number) => {
+    setBreakHours(val);
+    setIsBreakManuallySet(true);
+  };
+
+  // Auto-Calculate Hours from Shift
+  useEffect(() => {
+    if (!startTime || !endTime) return;
+
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+
+    let startMin = startH * 60 + startM;
+    let endMin = endH * 60 + endM;
+
+    // Handle Night Shift / Next Day crossover
+    if (endMin < startMin) {
+      endMin += 24 * 60;
+    }
+
+    const durationMin = endMin - startMin;
+    const rawHours = durationMin / 60;
+
+    // 1. Smart Break Logic
+    let currentBreak = breakHours;
+    if (!isBreakManuallySet) {
+      if (rawHours >= 5) {
+        currentBreak = 1;
+      } else {
+        currentBreak = 0;
+      }
+      setBreakHours(currentBreak);
+    }
+
+    // 2. Net Hours Loop
+    const netHours = Math.max(0, rawHours - currentBreak);
+    setHours(netHours);
+
+    // Auto-detect Night Shift (approximate: if shift covers 10PM - 6AM range significantly)
+    // Simple heuristic: If it crosses midnight or starts late
+    // Let's rely on manual toggle for accuracy, or maybe hint it?
+    // Allow manual override logic.
+
+  }, [startTime, endTime, breakHours, isBreakManuallySet]); // Dependencies
 
   // Real-time Computation
   useEffect(() => {
     const h = hours === '' ? 0 : hours;
-    const pay = computePay(h, rate, dayType, isRestDay, isNightShift);
+    const pay = computePay(h, rate, rateBasis, dayType, isRestDay, isNightShift);
     setComputedPay(pay);
-  }, [hours, rate, dayType, isRestDay, isNightShift]);
+  }, [hours, rate, rateBasis, dayType, isRestDay, isNightShift]);
 
   const handleSave = () => {
-    if (hours === '' || hours <= 0) {
+    // Allow 0 hours for Regular Holiday (paid time off)
+    if ((hours === '' || hours <= 0) && dayType !== 'regular') {
       alert('Please enter valid work hours.');
       return;
     }
@@ -118,20 +185,56 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
         {/* Body */}
         <div className="p-6 space-y-6">
 
-          {/* Hours Input */}
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Clock size={12} />
-              Hours Worked
-            </label>
-            <input
-              type="number"
-              autoFocus={!existingEntry}
-              value={hours}
-              onChange={(e) => setHours(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder="0"
-              className="w-full text-5xl font-black p-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white outline-none text-slate-800 placeholder-slate-200 text-center transition-all"
-            />
+          {/* Shift Inputs */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Start Time</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-indigo-500 outline-none text-slate-700 font-bold transition-all text-center"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">End Time</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-indigo-500 outline-none text-slate-700 font-bold transition-all text-center"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Break (Hrs)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={breakHours}
+                  onChange={(e) => handleBreakChange(Number(e.target.value))} // Handles manual override
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-indigo-500 outline-none text-slate-700 font-bold transition-all text-center"
+                />
+              </div>
+              <div className="flex-[2]">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Clock size={12} />
+                  Total Hours
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="0"
+                  className="w-full p-3 bg-indigo-50 text-indigo-900 rounded-xl border border-indigo-100 focus:border-indigo-500 outline-none font-black transition-all text-center"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Toggles Grid */}

@@ -7,14 +7,22 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { WorkDay } from '@/utils/computePay';
 import ThirteenthMonth from '@/components/ThirteenthMonth';
 import { formatCurrency } from '@/utils/formatCurrency';
-import { getMonthProjection } from '@/utils/projections';
+import { getPeriodProjection } from '@/utils/projections';
 import { TrendingUp, ArrowRight, Settings } from 'lucide-react';
+import { PayScheduleConfig, DEFAULT_SCHEDULE } from '@/utils/payPeriod';
 
 export default function Home() {
   const [onboarded] = useLocalStorage<boolean>('pinoy_pay_is_onboarded', false);
   const [history, setHistory] = useLocalStorage<WorkDay[]>('pinoy_pay_history', []);
   const [rate] = useLocalStorage<number>('pinoy_pay_default_rate', 610);
   const [workDays] = useLocalStorage<number[]>('pinoy_pay_work_days', [1, 2, 3, 4, 5]);
+  const [rateBasis] = useLocalStorage<'daily' | 'hourly'>('pinoy_pay_rate_basis', 'daily');
+  const [paySchedule] = useLocalStorage<PayScheduleConfig>('pinoy_pay_schedule', DEFAULT_SCHEDULE);
+
+  // Shift Settings for accurate estimation
+  const [defaultStartTime] = useLocalStorage<string>('pinoy_pay_default_start_time', '08:00');
+  const [defaultEndTime] = useLocalStorage<string>('pinoy_pay_default_end_time', '17:00');
+  const [defaultBreakHours] = useLocalStorage<number>('pinoy_pay_default_break_hours', 1);
 
   const handleSave = (entry: WorkDay) => {
     const filtered = history.filter(h => h.id !== entry.id);
@@ -27,13 +35,28 @@ export default function Home() {
     setHistory(updated);
   };
 
-  // Projection Data
-  const { totalProjected, earnedSoFar } = useMemo(() => {
-    return getMonthProjection(new Date(), history, rate, workDays);
-  }, [history, rate, workDays]);
+  // Calculate standard daily hours
+  const standardHours = useMemo(() => {
+    if (!defaultStartTime || !defaultEndTime) return 8;
+    const [startH, startM] = defaultStartTime.split(':').map(Number);
+    const [endH, endM] = defaultEndTime.split(':').map(Number);
+    let startMin = startH * 60 + startM;
+    let endMin = endH * 60 + endM;
+
+    if (endMin < startMin) endMin += 24 * 60;
+
+    const diffHours = (endMin - startMin) / 60;
+    return Math.max(0, diffHours - (defaultBreakHours || 0));
+  }, [defaultStartTime, defaultEndTime, defaultBreakHours]);
+
+  // Projection Data (Dynamic Period)
+  const { totalProjected, earnedSoFar, label } = useMemo(() => {
+    return getPeriodProjection(new Date(), history, rate, workDays, rateBasis, standardHours, paySchedule);
+  }, [history, rate, workDays, rateBasis, standardHours, paySchedule]);
 
   // ONBOARDING GATE
   if (!onboarded) {
+    // ... (keep existing)
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-6">
         <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4 shadow-xl shadow-blue-900/10 border-4 border-white ring-1 ring-slate-100">
@@ -57,14 +80,17 @@ export default function Home() {
     <div className="flex flex-col gap-8 pb-20">
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+      <div className="flex flex-row items-center justify-between gap-4 px-2 mt-2">
         <div>
           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
           <p className="text-slate-500 font-medium">Welcome back, Kabayan!</p>
         </div>
+        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 md:hidden">
+          <img src="/icons/pinoypay.svg" alt="PinoyPay" className="w-7 h-7" />
+        </div>
       </div>
 
-      {/* Projection Card (No Auto-Fill Button) */}
+      {/* Projection Card (Period Based) */}
       <div className="bg-[#172554] rounded-3xl p-6 text-white shadow-xl shadow-blue-900/20 relative overflow-hidden ring-1 ring-white/20">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/30 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#FDD723]/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4 pointer-events-none"></div>
@@ -74,7 +100,7 @@ export default function Home() {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2 text-blue-200 text-xs font-bold uppercase tracking-widest mb-2">
                 <TrendingUp size={14} className="text-[#FDD723]" />
-                Monthly Projection
+                {label || 'Projection'}
               </div>
               <Link href="/settings" className="text-blue-300 hover:text-white transition">
                 <Settings size={16} />
@@ -114,6 +140,9 @@ export default function Home() {
         onDelete={handleDelete}
         rate={rate}
         workDays={workDays}
+        rateBasis={rateBasis}
+        hoursPerDay={standardHours}
+        paySchedule={paySchedule}
       />
     </div>
   );

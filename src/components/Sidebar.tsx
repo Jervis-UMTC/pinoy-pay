@@ -3,10 +3,12 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Calculator, History, Settings, LogOut } from 'lucide-react';
+import { Calculator, History, Settings, LogOut, Download } from 'lucide-react';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { isInstallable, install } = usePWAInstall();
 
   const navItems = [
     { href: '/', label: 'Work Log', icon: Calculator },
@@ -43,6 +45,16 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {isInstallable && (
+          <button
+            onClick={install}
+            className="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group text-blue-200 hover:bg-white/5 hover:text-white hover:scale-105"
+          >
+            <Download size={20} className="text-blue-300 group-hover:text-[#FDD723] transition-colors" />
+            <span className="font-medium tracking-wide">Install App</span>
+          </button>
+        )}
       </nav>
 
       <div className="mt-auto pt-6 border-t border-blue-900/50">

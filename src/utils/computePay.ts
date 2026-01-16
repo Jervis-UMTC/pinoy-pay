@@ -12,17 +12,22 @@ export interface WorkDay {
 
 export const computePay = (
   hoursWorked: number,
-  dailyRate: number,
+  rate: number,
+  rateBasis: 'daily' | 'hourly',
   dayType: 'normal' | 'special' | 'regular',
   isRestDay: boolean,
   isNightShift: boolean
 ): number => {
-  const hourlyRate = dailyRate / 8;
+  const hourlyRate = rateBasis === 'hourly' ? rate : rate / 8;
   let multiplier = 1.0;
 
   // Determine base multiplier based on Day Type and Rest Day status
   if (dayType === 'normal') {
-    multiplier = 1.0; // 100%
+    if (isRestDay) {
+      multiplier = 1.3; // 130%
+    } else {
+      multiplier = 1.0; // 100%
+    }
   } else if (dayType === 'special') {
     if (isRestDay) {
       multiplier = 1.5; // 150%
@@ -30,6 +35,11 @@ export const computePay = (
       multiplier = 1.3; // 130%
     }
   } else if (dayType === 'regular') {
+    // If no work on regular holiday, pay is 100%
+    if (hoursWorked === 0) {
+      return rateBasis === 'hourly' ? rate * 8 : rate;
+    }
+
     if (isRestDay) {
       multiplier = 2.6; // 260%
     } else {
