@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PinoyPay 🇵🇭
 
-## Getting Started
+**PinoyPay** is an offline-first **Salary Calculator & Work Log** designed specifically for Filipino workers. It helps you track your daily earnings, overtime, night differential, and holiday pay with adherence to standard Philippine labor definitions.
 
-First, run the development server:
+![PinoyPay App](/public/icons/pinoypay.svg)
+
+## 🚀 Features
+
+*   **Offline First (PWA)**: Works without an internet connection. Installable on Android/iOS.
+*   **Smart Calculations**: Automatically computes:
+    *   Regular Overtime (125%)
+    *   Rest Day Overtime (130% / 169%)
+    *   Special Non-Working Holidays (130%)
+    *   Regular Holidays (200% / 260%)
+    *   Night Differential (+10%)
+*   **Calendar Visualization**:
+    *   Visual indicators for Pay Days (15th/30th, Weekly, or Monthly).
+    *   Gold badges for "Paid" days, Green badges for "Pending".
+    *   Monthly earning projections vs. actual earnings.
+*   **Flexible Settings**:
+    *   Support for **Daily** or **Hourly** rate basis.
+    *   Customizable work schedule (Mon-Fri, Mon-Sat, etc.).
+    *   Adjustable shift start/end times.
+*   **Privacy Focused**: All data is stored locally on your device (`localStorage`). No servers, no tracking.
+
+## 🛠️ Tech Stack
+
+*   **Framework**: [Next.js 14](https://nextjs.org/) (App Router)
+*   **Language**: [TypeScript](https://www.typescriptlang.org/)
+*   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+*   **Icons**: [Lucide React](https://lucide.dev/)
+*   **Date Handling**: [date-fns](https://date-fns.org/)
+*   **PWA**: `next-pwa`
+
+## 📱 Installation
+
+### As a User (PWA)
+1.  Open the app in Chrome (Android) or Safari (iOS).
+2.  Tap the **"Install App"** button in the navigation menu (or "Add to Home Screen" in browser settings).
+3.  Launch from your home screen like a native app.
+
+### For Developers
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/pinoy-pay.git
+    cd pinoy-pay
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    # or
+    yarn install
+    ```
+
+3.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
+
+4.  Open [http://localhost:3000](http://localhost:3000) with your browser.
+
+## 📦 Building for Production
+
+To create an optimized production build:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📄 License
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+This project is open-source and available under the [MIT License](LICENSE).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> **Note**: This tool is for estimation purposes only. Always verify with your official payslip.
