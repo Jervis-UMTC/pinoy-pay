@@ -1,12 +1,8 @@
 import { useState, useEffect } from 'react';
 
-// Hook to manage local storage
 export function useLocalStorage<T>(key: string, initialValue: T) {
-  // State to store our value
-  // Initialize with initialValue first to match server-side rendering
   const [storedValue, setStoredValue] = useState<T>(initialValue);
 
-  // Once mounted, we can safely access localStorage without hydration mismatch
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
@@ -16,25 +12,20 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         }
       }
     } catch (error) {
-      // Fail silently in production
+      // Ignore
     }
   }, [key]);
 
-  // Return a wrapped version of useState's setter function that ...
-  // ... persists the new value to localStorage.
   const setValue = (value: T | ((val: T) => T)) => {
     try {
-      // Allow value to be a function so we have same API as useState
       const valueToStore =
         value instanceof Function ? value(storedValue) : value;
-      // Save state
       setStoredValue(valueToStore);
-      // Save to local storage
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(key, JSON.stringify(valueToStore));
       }
     } catch (error) {
-      // Fail silently
+      // Ignore
     }
   };
 

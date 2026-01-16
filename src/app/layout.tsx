@@ -32,12 +32,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} bg-slate-50 min-h-screen pb-20 md:pb-0 font-sans`}>
-        {/* Desktop Sidebar */}
         <Sidebar />
 
-
-
-        {/* Main Content Area - Responsive Margins */}
         <main className="md:ml-64 p-0 md:p-8 max-w-7xl mx-auto min-h-screen transition-all">
           {children}
         </main>

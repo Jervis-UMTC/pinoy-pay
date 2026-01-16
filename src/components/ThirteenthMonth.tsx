@@ -13,7 +13,6 @@ export default function ThirteenthMonth({ history }: Props) {
   const data = useMemo(() => {
     const currentYear = new Date().getFullYear();
 
-    // Sum of Basic Pay for the year
     const totalBasicPay = history.reduce((acc, entry) => {
       const entryYear = new Date(entry.date).getFullYear();
       if (entryYear === currentYear) {

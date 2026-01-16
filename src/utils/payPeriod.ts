@@ -5,14 +5,8 @@ export type PayFrequency = 'semi-monthly' | 'weekly' | 'monthly';
 
 export interface PayScheduleConfig {
   frequency: PayFrequency;
-  // Type A: Semi-Monthly
-  // Default: Cutoff 26-10 (Paid 15), Cutoff 11-25 (Paid 30)
-
-  // Type B: Weekly
   payDayOfWeek?: number; // 6 = Saturday
-
-  // Type C: Monthly
-  monthlyPayDay?: number; // 15 or 30
+  monthlyPayDay?: number;
 }
 
 export interface PayPeriod {
@@ -44,7 +38,24 @@ export function isPayDay(date: Date, config: PayScheduleConfig): boolean {
   } else {
     // Monthly
     const targetDay = config.monthlyPayDay || 15;
-    return getDate(date) === targetDay;
+    const currentDay = getDate(date);
+
+    // Case 1: Today is the target day
+    if (currentDay === targetDay) return true;
+
+    // Case 2: Overflow Logic (Target day > Days in this month)
+    // If today is the 1st, check if the *previous* month was "too short" for the target day.
+    if (currentDay === 1) {
+      const prevMonth = subMonths(date, 1);
+      const daysInPrevMonth = getDate(endOfMonth(prevMonth));
+
+      // If target was 30, and prev month had 28 days -> Pay on 1st.
+      if (targetDay > daysInPrevMonth) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 
@@ -67,9 +78,12 @@ export function getPayPeriodForPayDate(payDate: Date, config: PayScheduleConfig)
       };
     }
   } else if (config.frequency === 'weekly') {
-    // Coverage: Mon-Sun of the previous week (1-week lag)
-    const end = subDays(payDate, 6);
-    const start = subDays(end, 6);
+    // PayDate is Saturday.
+    // Start = Sunday (6 days before).
+    // End = Saturday (PayDate).
+
+    const start = subDays(payDate, 6);
+    const end = payDate;
 
     return { start, end };
   } else {
@@ -92,7 +106,6 @@ export function getNextPayPeriod(date: Date, config: PayScheduleConfig): PayPeri
   }
 }
 
-// Type A: Standard Corporate (1st-15th -> Paid 15th, 16th-End -> Paid End)
 function getSemiMonthlyPeriod(date: Date): PayPeriod {
   const currentDay = getDate(date);
 
@@ -118,17 +131,14 @@ function getSemiMonthlyPeriod(date: Date): PayPeriod {
   };
 }
 
-// Type B: Weekly (Standard Saturday Payout)
 function getWeeklyPeriod(date: Date, payDayOfWeek: number): PayPeriod {
-  const currentDay = date.getDay(); // 0-6
+  const currentDay = date.getDay(); // 0-6 (Sun=0)
 
-  // Work week is Mon-Sun
-  const diffToMon = (currentDay + 6) % 7;
-  const start = addDays(date, -diffToMon);
-  const end = addDays(start, 6);
+  const diffToSun = currentDay;
+  const start = addDays(date, -diffToSun);
+  const end = addDays(start, 6); // Saturday
 
-  // Payout is the following Saturday (1 week lag)
-  const payDate = addDays(end, 6);
+  const payDate = end;
 
   return {
     start,
@@ -138,11 +148,20 @@ function getWeeklyPeriod(date: Date, payDayOfWeek: number): PayPeriod {
   };
 }
 
-// Type C: Monthly (Paid next month)
 function getMonthlyPeriod(date: Date, payDay: number): PayPeriod {
   const start = startOfMonth(date);
   const end = endOfMonth(date);
-  const payDate = setDate(addMonths(date, 1), payDay);
+
+  let payDate = setDate(addMonths(date, 1), payDay);
+
+  const nextMonth = addMonths(date, 1);
+  const daysInNextMonth = getDate(endOfMonth(nextMonth));
+
+  if (payDay > daysInNextMonth) {
+    payDate = startOfMonth(addMonths(nextMonth, 1));
+  } else {
+    payDate = setDate(nextMonth, payDay);
+  }
 
   return {
     start,

@@ -19,7 +19,7 @@ export default function Home() {
   const [rateBasis] = useLocalStorage<'daily' | 'hourly'>('pinoy_pay_rate_basis', 'daily');
   const [paySchedule] = useLocalStorage<PayScheduleConfig>('pinoy_pay_schedule', DEFAULT_SCHEDULE);
 
-  // Shift Settings for accurate estimation
+  // Shift Settings
   const [defaultStartTime] = useLocalStorage<string>('pinoy_pay_default_start_time', '08:00');
   const [defaultEndTime] = useLocalStorage<string>('pinoy_pay_default_end_time', '17:00');
   const [defaultBreakHours] = useLocalStorage<number>('pinoy_pay_default_break_hours', 1);
@@ -35,7 +35,6 @@ export default function Home() {
     setHistory(updated);
   };
 
-  // Calculate standard daily hours
   const standardHours = useMemo(() => {
     if (!defaultStartTime || !defaultEndTime) return 8;
     const [startH, startM] = defaultStartTime.split(':').map(Number);
@@ -49,7 +48,6 @@ export default function Home() {
     return Math.max(0, diffHours - (defaultBreakHours || 0));
   }, [defaultStartTime, defaultEndTime, defaultBreakHours]);
 
-  // Projection Data (Dynamic Period)
   const { totalProjected, earnedSoFar, label } = useMemo(() => {
     return getPeriodProjection(new Date(), history, rate, workDays, rateBasis, standardHours, paySchedule);
   }, [history, rate, workDays, rateBasis, standardHours, paySchedule]);

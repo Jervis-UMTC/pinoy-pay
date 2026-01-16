@@ -11,14 +11,7 @@ interface Props {
 
 export default function SalaryChart({ history }: Props) {
   const data = useMemo(() => {
-    // Group by week or just show last 7 days? 
-    // Prompt says: "Earnings this Week" vs "Earnings Last Week"
-    // For simplicity, let's just show last 7 entries or group by day if multiple entries per day.
-    // Actually, prompt says "Earnings this Week" vs "Earnings Last Week" bar chart.
-    // This implies two bars? Or a trend?
-    // "Simple bar chart on History page showing Earnings this Week vs Earnings Last Week."
-    // Okay, calculate those two values.
-
+    // Calculate last 2 weeks earnings
     const now = new Date();
     const startOfThisWeek = new Date(now.setDate(now.getDate() - now.getDay()));
     startOfThisWeek.setHours(0, 0, 0, 0);

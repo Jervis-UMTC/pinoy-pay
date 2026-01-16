@@ -51,8 +51,6 @@ export default function HistoryPage() {
         )}
       </div>
 
-      {/* {history.length > 0 && <SalaryChart history={history} />} */}
-
       <div className="space-y-4">
         {history.length === 0 ? (
           <div className="text-center py-10 text-gray-400">

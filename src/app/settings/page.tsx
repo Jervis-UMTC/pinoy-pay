@@ -102,7 +102,6 @@ export default function SettingsPage() {
   };
 
   const performSave = () => {
-    // 1. Save Settings
     setPersistedWorkDays(tempWorkDays);
     setRateBasis(tempRateBasis);
     setPaySchedule(tempPaySchedule);
@@ -112,22 +111,18 @@ export default function SettingsPage() {
 
     setHasChanges(false);
 
-    // 2. Clean Up: Remove days that are no longer in the schedule for the current month
     const currentMonthPrefix = new Date().toISOString().slice(0, 7); // yyyy-MM
     const cleanHistory = history.filter(entry => {
-      // Keep entries from other months
       if (!entry.date.startsWith(currentMonthPrefix)) return true;
 
-      // For current month, verify the day matches the new schedule
       const entryDate = new Date(entry.date);
       const dayOfWeek = entryDate.getDay();
       return tempWorkDays.includes(dayOfWeek);
     });
 
-    // 3. Auto-Fill for Current Month using the NEW settings
     const newEntries = generateAutoFillEntries(
       new Date(),
-      cleanHistory, // Use cleaned history
+      cleanHistory,
       rate,
       tempWorkDays,
       {
@@ -138,13 +133,11 @@ export default function SettingsPage() {
       tempRateBasis
     );
 
-    // Merge and Save History
     const updatedHistory = [...cleanHistory, ...newEntries].sort((a, b) =>
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
     setHistory(updatedHistory);
 
-    // 4. Complete Onboarding
     setOnboarded(true);
     setShowConfirm(false);
     setTimeout(() => setShowSuccess(true), 300);
@@ -291,7 +284,6 @@ export default function SettingsPage() {
           <p className="text-xs text-slate-400 mb-4">When do you receive your salary?</p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Type A: Corporate */}
             <button
               onClick={() => { setTempPaySchedule({ ...tempPaySchedule, frequency: 'semi-monthly' }); setHasChanges(true); }}
               className={`p-3 rounded-xl border-2 text-left transition-all relative overflow-hidden ${tempPaySchedule.frequency === 'semi-monthly'
@@ -307,7 +299,6 @@ export default function SettingsPage() {
               {tempPaySchedule.frequency === 'semi-monthly' && <CheckCircle size={14} className="text-blue-900 absolute top-2 right-2" />}
             </button>
 
-            {/* Type B: Weekly */}
             <button
               onClick={() => { setTempPaySchedule({ ...tempPaySchedule, frequency: 'weekly', payDayOfWeek: 6 }); setHasChanges(true); }}
               className={`p-3 rounded-xl border-2 text-left transition-all relative overflow-hidden ${tempPaySchedule.frequency === 'weekly'
@@ -323,7 +314,6 @@ export default function SettingsPage() {
               {tempPaySchedule.frequency === 'weekly' && <CheckCircle size={14} className="text-blue-900 absolute top-2 right-2" />}
             </button>
 
-            {/* Type C: Monthly */}
             <button
               onClick={() => { setTempPaySchedule({ ...tempPaySchedule, frequency: 'monthly', monthlyPayDay: 15 }); setHasChanges(true); }}
               className={`p-3 rounded-xl border-2 text-left transition-all relative overflow-hidden ${tempPaySchedule.frequency === 'monthly'
@@ -339,6 +329,31 @@ export default function SettingsPage() {
               {tempPaySchedule.frequency === 'monthly' && <CheckCircle size={14} className="text-blue-900 absolute top-2 right-2" />}
             </button>
           </div>
+
+          {/* Monthly Pay Day Config */}
+          {tempPaySchedule.frequency === 'monthly' && (
+            <div className="mt-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Monthly Payout Day</label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={tempPaySchedule.monthlyPayDay || 15}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 15;
+                    setTempPaySchedule({ ...tempPaySchedule, monthlyPayDay: Math.min(31, Math.max(1, val)) });
+                    setHasChanges(true);
+                  }}
+                  className="w-24 p-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-900 outline-none text-center font-bold text-lg"
+                />
+                <p className="text-xs text-slate-500 flex-1">
+                  Day of the month to receive payment.<br />
+                  <span className="text-blue-800 italic">Note: If this day doesn't exist in a month (e.g. 30th in Feb), payment will be on the 1st of the next month.</span>
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Work Schedule */}

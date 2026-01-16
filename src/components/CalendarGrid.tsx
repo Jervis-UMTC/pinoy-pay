@@ -20,7 +20,7 @@ import { PayScheduleConfig, DEFAULT_SCHEDULE, isPayDay, getNextPayPeriod, getPay
 import DayLogModal from './DayLogModal';
 import SimpleDayActions from './SimpleDayActions';
 
-import { getMonthProjection } from '@/utils/projections';
+import { getViewProjection } from '@/utils/projections';
 
 interface Props {
   history: WorkDay[];
@@ -53,13 +53,12 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
 
   const getEntryForDay = (date: Date) => {
-    // Basic day matching - ISO string split matches 'YYYY-MM-DD' stored in entry.date
     const dateStr = format(date, 'yyyy-MM-dd');
     return history.find(h => h.date === dateStr);
   };
 
   // Projection Calculation
-  const { totalProjected, earnedSoFar } = getMonthProjection(currentDate, history, rate || 610, workDays, rateBasis, hoursPerDay);
+  const { totalProjected, earnedSoFar } = getViewProjection(startDate, endDate, history, rate || 610, workDays, rateBasis, hoursPerDay);
   const progressPercentage = totalProjected > 0 ? Math.min((earnedSoFar / totalProjected) * 100, 100) : 0;
 
   const handleDayClick = (day: Date) => {
@@ -132,10 +131,10 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
           let textClass = 'text-gray-500';
 
           if (!isCurrentMonth) {
-            bgClass = 'bg-gray-100 opacity-40 grayscale'; // Completely ghosted
-            textClass = 'text-gray-300';
+            bgClass = 'bg-slate-50/50'; // Slightly different background to distinguish, but visible
+            textClass = 'text-slate-400 font-medium'; // Visible text
           } else if (isPast) {
-            bgClass = 'bg-slate-200/60 border-slate-200'; // Darker gray for clear "past" state
+            bgClass = 'bg-slate-100/60 border-slate-200'; // Darker gray for clear "past" state
             textClass = 'text-slate-500 font-medium opacity-70';
           } else if (isToday) {
             bgClass = 'bg-blue-50 border-blue-400 ring-2 ring-blue-400 ring-offset-2 z-10'; // Pop out style
@@ -190,16 +189,22 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
 
                 {/* Pay Day Indicator or Total Payout */}
                 {isActualPayDay && (
-                  payoutTotal > 0 ? (
-                    <div className="absolute top-1 right-1 bg-gradient-to-br from-yellow-300 to-amber-400 text-blue-900 border border-amber-100 px-1.5 py-0.5 rounded-lg shadow-sm z-30 flex flex-col items-end">
-                      <span className="text-[7px] uppercase font-bold text-amber-900/60 leading-none mb-0.5">Payout</span>
-                      <span className="text-[10px] md:text-xs font-black leading-none">₱{Math.round(payoutTotal).toLocaleString()}</span>
-                    </div>
-                  ) : (
-                    <div className="absolute top-1 right-1 bg-[#FDD723] text-blue-900 w-4 h-4 md:w-5 md:h-5 rounded-full flex items-center justify-center text-[10px] md:text-xs font-black shadow-md ring-1 ring-white z-20" title="Pay Day">
-                      ₱
-                    </div>
-                  )
+                  (() => {
+                    const period = getPayPeriodForPayDate(day, paySchedule);
+                    const rangeLabel = period ? `${format(period.start, 'MMM d')} - ${format(period.end, 'MMM d')}` : 'Unknown Period';
+
+                    return payoutTotal > 0 ? (
+                      <div className="absolute top-1 right-1 bg-gradient-to-br from-yellow-300 to-amber-400 text-blue-900 border border-amber-100 px-1.5 py-0.5 rounded-lg shadow-sm z-30 flex flex-col items-end" title={`Covers: ${rangeLabel}`}>
+                        <span className="text-[7px] uppercase font-bold text-amber-900/60 leading-none mb-0.5">Payout</span>
+                        <span className="text-[10px] md:text-xs font-black leading-none">₱{Math.round(payoutTotal).toLocaleString()}</span>
+                      </div>
+                    ) : (
+                      <div className="absolute top-1 right-1 bg-[#FDD723] text-blue-900 w-auto px-1.5 h-4 md:h-5 rounded-full flex items-center justify-center text-[8px] md:text-[10px] font-bold shadow-md ring-1 ring-white z-20 cursor-help" title={`Scheduled Pay Day\nCovers: ${rangeLabel}`}>
+                        <span className="mr-1">₱</span>
+                        <span className="opacity-70 text-[6px] uppercase">{rangeLabel}</span>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
 
@@ -212,7 +217,7 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
                   </div>
                 )}
 
-                {/* Entry Badge */}
+                {/* Entry Badge or Projected */}
                 {entry ? (
                   <div className={`text-[9px] md:text-xs font-bold px-1 rounded py-0.5 mt-auto transition-colors ${isPaidStatus
                     ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300'
@@ -221,8 +226,15 @@ export default function CalendarGrid({ history, onSave, onDelete, rate, workDays
                     ₱{Math.round(entry.totalPay).toLocaleString()}
                   </div>
                 ) : (
-                  /* Placeholder for Rest Day */
-                  null
+                  /* Projected / Scheduled */
+                  workDays.includes(day.getDay()) && !holiday ? (
+                    <div className={`text-[9px] md:text-xs font-bold px-1 rounded py-0.5 mt-auto transition-colors ${now > dayPayPeriod.payDate
+                      ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300'
+                      : 'bg-green-100 text-green-700'
+                      }`}>
+                      ₱{Math.round(rate).toLocaleString()}
+                    </div>
+                  ) : null
                 )}
               </div>
             </div>

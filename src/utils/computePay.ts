@@ -21,29 +21,27 @@ export const computePay = (
   const hourlyRate = rateBasis === 'hourly' ? rate : rate / 8;
   let multiplier = 1.0;
 
-  // Determine base multiplier based on Day Type and Rest Day status
   if (dayType === 'normal') {
     if (isRestDay) {
-      multiplier = 1.3; // 130%
+      multiplier = 1.3;
     } else {
-      multiplier = 1.0; // 100%
+      multiplier = 1.0;
     }
   } else if (dayType === 'special') {
     if (isRestDay) {
-      multiplier = 1.5; // 150%
+      multiplier = 1.5;
     } else {
-      multiplier = 1.3; // 130%
+      multiplier = 1.3;
     }
   } else if (dayType === 'regular') {
-    // If no work on regular holiday, pay is 100%
     if (hoursWorked === 0) {
       return rateBasis === 'hourly' ? rate * 8 : rate;
     }
 
     if (isRestDay) {
-      multiplier = 2.6; // 260%
+      multiplier = 2.6;
     } else {
-      multiplier = 2.0; // 200%
+      multiplier = 2.0;
     }
   }
 
@@ -62,7 +60,6 @@ export const computePay = (
   pay += regularHours * regularRate;
 
   // Overtime Calculation
-  // Standard: 125% for normal days, 130% for rest/holiday
   if (overtimeHours > 0) {
     let otMultiplier;
     if (dayType === 'normal' && !isRestDay) {

@@ -54,6 +54,55 @@ export function getPeriodProjection(
   return { totalProjected, earnedSoFar, label, period };
 }
 
+export function getViewProjection(
+  start: Date,
+  end: Date,
+  history: WorkDay[],
+  rate: number,
+  workDays: number[] = [],
+  rateBasis: 'daily' | 'hourly' = 'daily',
+  hoursPerDay: number = 8
+) {
+  const days = eachDayOfInterval({ start, end });
+
+  let totalProjected = 0;
+  let earnedSoFar = 0;
+
+  // Use local time for "today" to match the calendar's day logic
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+  days.forEach((day) => {
+    const dateStr = format(day, 'yyyy-MM-dd');
+    const existing = history.find((h) => h.date === dateStr);
+
+    if (existing) {
+      totalProjected += existing.totalPay;
+
+      if (dateStr < todayStr) {
+        earnedSoFar += existing.totalPay;
+      }
+    } else {
+      const dayOfWeek = day.getDay();
+      const isWorkDay = workDays.includes(dayOfWeek);
+
+      if (isWorkDay) {
+        const holiday = getHoliday(day);
+        const dayType = holiday ? holiday.type : 'normal';
+        // Assume 8 hours for projection
+        const estimatedPay = computePay(8, rate, rateBasis, dayType, false, false);
+
+        totalProjected += estimatedPay;
+
+        if (dateStr < todayStr) {
+          earnedSoFar += estimatedPay;
+        }
+      }
+    }
+  });
+
+  return { totalProjected, earnedSoFar };
+}
+
 export function getMonthProjection(
   date: Date,
   history: WorkDay[],
@@ -64,49 +113,7 @@ export function getMonthProjection(
 ) {
   const start = startOfMonth(date);
   const end = endOfMonth(date);
-  const days = eachDayOfInterval({ start, end });
-
-  let totalProjected = 0;
-  let earnedSoFar = 0;
-
-  // Use local time for "today" to match the calendar's day logic
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
-
-  days.forEach((day) => {
-    // 1. Logged Day
-    const dateStr = format(day, 'yyyy-MM-dd');
-    const existing = history.find((h) => h.date === dateStr);
-
-    if (existing) {
-      totalProjected += existing.totalPay;
-
-      // Earned (Strictly Past)
-      if (dateStr < todayStr) {
-        earnedSoFar += existing.totalPay;
-      }
-    } else {
-      // 2. Estimate for this day
-      const dayOfWeek = day.getDay();
-      const isWorkDay = workDays.includes(dayOfWeek);
-
-      if (isWorkDay) {
-        const holiday = getHoliday(day);
-        const dayType = holiday ? holiday.type : 'normal';
-        // Assume 8 hours for projection
-        const estimatedPay = computePay(8, rate, rateBasis, dayType, false, false);
-
-        // Add to Potential Total
-        totalProjected += estimatedPay;
-
-        // Add to Earned if strictly past (Accrued)
-        if (dateStr < todayStr) {
-          earnedSoFar += estimatedPay;
-        }
-      }
-    }
-  });
-
-  return { totalProjected, earnedSoFar };
+  return getViewProjection(start, end, history, rate, workDays, rateBasis, hoursPerDay);
 }
 
 export function generateAutoFillEntries(

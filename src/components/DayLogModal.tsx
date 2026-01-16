@@ -50,7 +50,6 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
       // Default to standard hours if not strictly defined.
       // For now, leave blank if editing, unless we change the interface to store them.
     } else {
-      // SMART DEFAULTS
       const holiday = getHoliday(date);
       if (holiday) {
         setDayType(holiday.type);
@@ -102,7 +101,7 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
     const durationMin = endMin - startMin;
     const rawHours = durationMin / 60;
 
-    // 1. Smart Break Logic
+    // Break Logic
     let currentBreak = breakHours;
     if (!isBreakManuallySet) {
       if (rawHours >= 5) {
@@ -113,14 +112,8 @@ export default function DayLogModal({ date, existingEntry, onSave, onDelete, onC
       setBreakHours(currentBreak);
     }
 
-    // 2. Net Hours Loop
     const netHours = Math.max(0, rawHours - currentBreak);
     setHours(netHours);
-
-    // Auto-detect Night Shift (approximate: if shift covers 10PM - 6AM range significantly)
-    // Simple heuristic: If it crosses midnight or starts late
-    // Let's rely on manual toggle for accuracy, or maybe hint it?
-    // Allow manual override logic.
 
   }, [startTime, endTime, breakHours, isBreakManuallySet]); // Dependencies
 
